@@ -1,0 +1,31 @@
+name: uptime-check
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check endpoints and alert Slack on failure
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          LEAD: https://lead-engine-lilac.vercel.app/api/ping
+          PIPE: https://lead-engine-lilac.vercel.app/api/ping   # temp duplicate; replace later
+        run: |
+          set -e
+          fail=0
+          for url in "$LEAD" "$PIPE"; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 12 "$url" || true)
+            echo "$url -> $code"
+            if [ "$code" != "200" ]; then
+              fail=1
+              if [ -n "$SLACK_WEBHOOK_URL" ]; then
+                curl -s -X POST -H 'Content-Type: application/json' \
+                  --data "{\"text\":\"❌ Uptime check failed: $url → $code\"}" \
+                  "$SLACK_WEBHOOK_URL" >/dev/null || true
+              fi
+            fi
+          done
+          exit $fail
