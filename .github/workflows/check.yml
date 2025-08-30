@@ -12,7 +12,7 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           LEAD: https://lead-engine-lilac.vercel.app/api/ping
-          PIPE: https://lead-engine-lilac.vercel.app/api/ping   # temp duplicate; replace later
+          PIPE: https://lead-engine-lilac.vercel.app/api/health
         run: |
           set -e
           fail=0
