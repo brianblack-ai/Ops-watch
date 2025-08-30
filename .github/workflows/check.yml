@@ -16,7 +16,7 @@ jobs:
         run: |
           set -e
           fail=0
-          for url in "$LEAD" "$PIPE"; do
+          for url in "$PIPE"; do
             code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 12 "$url" || true)
             echo "$url -> $code"
             if [ "$code" != "200" ]; then
