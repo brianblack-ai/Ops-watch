@@ -11,12 +11,6 @@ jobs:
       - name: Test Slack from Actions
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          [ -z "$SLACK_WEBHOOK_URL" ] && echo "No SLACK_WEBHOOK_URL set" && exit 1
-          curl -s -X POST -H 'Content-Type: application/json' \
-            --data '{"text":"🔬 Actions test: hello from *ops-watch*"}' \
-            "$SLACK_WEBHOOK_URL" >/dev/null || true
-
       - name: Check endpoints and alert Slack on failure
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
