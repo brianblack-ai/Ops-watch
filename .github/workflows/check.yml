@@ -8,9 +8,6 @@ jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Test Slack from Actions
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
       - name: Check endpoints and alert Slack on failure
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
