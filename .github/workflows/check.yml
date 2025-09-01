@@ -14,7 +14,6 @@ jobs:
       matrix:
         target:
           - { name: health, url: "https://lead-engine-lilac.vercel.app/api/health" }
-          - { name: ping,   url: "https://lead-engine-lilac.vercel.app/api/ping" }  # delete this line if you don't have /api/ping
     steps:
       - name: Ping ${{ matrix.target.name }}
         id: curl
@@ -27,7 +26,6 @@ jobs:
           ms=$((end_ms - start_ms))
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "ms=$ms" >> "$GITHUB_OUTPUT"
-          # Fail the step if not 2xx
           if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
             exit 1
           fi
@@ -52,13 +50,10 @@ jobs:
           elif [ "$MS" -gt "$LAT_WARN" ]; then
             send=true; level="WARN"
           fi
-
           if $send; then
             payload=$(printf '{"text":"Uptime-check • %s • %s (%s) • code=%s • %sms • %s"}' \
               "$level" "$TARGET_NAME" "$TARGET_URL" "$CODE" "$MS" "$RUN_URL")
             curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
           else
-            echo "Skipping Slack: success and ${MS}ms <= ${LAT_WARN}ms"
-          fi
-
+            echo "Skipping Slack: su
 
