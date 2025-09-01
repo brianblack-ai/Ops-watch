@@ -1,31 +1,64 @@
-name: uptime-check
+name: Uptime-check
+
 on:
-  schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes
   workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"   # hourly, UTC
 
 jobs:
   ping:
     runs-on: ubuntu-latest
+    env:
+      LATENCY_WARN_MS: "1200"  # alert if success but slower than this
+    strategy:
+      matrix:
+        target:
+          - { name: health, url: "https://lead-engine-lilac.vercel.app/api/health" }
+          - { name: ping,   url: "https://lead-engine-lilac.vercel.app/api/ping" }  # delete this line if you don't have /api/ping
     steps:
-      - name: Check endpoints and alert Slack on failure
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          PIPE: https://lead-engine-lilac.vercel.app/api/health
+      - name: Ping ${{ matrix.target.name }}
+        id: curl
+        shell: bash
         run: |
           set -e
-          fail=0
-          for url in "$PIPE"; do
-            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 12 "$url" || true)
-            echo "$url -> $code"
-            if [ "$code" != "200" ]; then
-              fail=1
-              if [ -n "$SLACK_WEBHOOK_URL" ]; then
-                curl -s -X POST -H 'Content-Type: application/json' \
-                  --data "{\"text\":\"❌ Uptime check failed: $url → $code\"}" \
-                  "$SLACK_WEBHOOK_URL" >/dev/null || true
-              fi
-            fi
-          done
-          exit $fail
+          start_ms=$(date +%s%3N)
+          code=$(curl -s -o /dev/null -w "%{http_code}" "${{ matrix.target.url }}")
+          end_ms=$(date +%s%3N)
+          ms=$((end_ms - start_ms))
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "ms=$ms" >> "$GITHUB_OUTPUT"
+          # Fail the step if not 2xx
+          if [ "$code" -lt 200 ] || [ "$code" -ge 300 ]; then
+            exit 1
+          fi
+
+      - name: Notify Slack ONLY on failure or slow success
+        if: always()
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          STATUS: ${{ job.status }}
+          CODE: ${{ steps.curl.outputs.code }}
+          MS: ${{ steps.curl.outputs.ms }}
+          TARGET_NAME: ${{ matrix.target.name }}
+          TARGET_URL: ${{ matrix.target.url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LAT_WARN: ${{ env.LATENCY_WARN_MS }}
+        shell: bash
+        run: |
+          send=false
+          level="OK"
+          if [ "$STATUS" != "success" ]; then
+            send=true; level="FAIL"
+          elif [ "$MS" -gt "$LAT_WARN" ]; then
+            send=true; level="WARN"
+          fi
+
+          if $send; then
+            payload=$(printf '{"text":"Uptime-check • %s • %s (%s) • code=%s • %sms • %s"}' \
+              "$level" "$TARGET_NAME" "$TARGET_URL" "$CODE" "$MS" "$RUN_URL")
+            curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
+          else
+            echo "Skipping Slack: success and ${MS}ms <= ${LAT_WARN}ms"
+          fi
+
 
