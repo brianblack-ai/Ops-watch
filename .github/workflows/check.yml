@@ -3,25 +3,21 @@ name: Uptime-check
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 * * * *"   # hourly, UTC
+    - cron: "0 * * * *"   # hourly (UTC)
 
 jobs:
   ping:
     runs-on: ubuntu-latest
     env:
-      LATENCY_WARN_MS: "1200"  # alert if success but slower than this
-    strategy:
-      matrix:
-        target:
-          - { name: health, url: "https://lead-engine-lilac.vercel.app/api/health" }
+      HEALTH_URL: "https://lead-engine-lilac.vercel.app/api/health"
+      LATENCY_WARN_MS: "1200"  # alert on success if slower than this
     steps:
-      - name: Ping ${{ matrix.target.name }}
+      - name: Ping health
         id: curl
-        shell: bash
         run: |
           set -e
           start_ms=$(date +%s%3N)
-          code=$(curl -s -o /dev/null -w "%{http_code}" "${{ matrix.target.url }}")
+          code=$(curl -s -o /dev/null -w "%{http_code}" "$HEALTH_URL")
           end_ms=$(date +%s%3N)
           ms=$((end_ms - start_ms))
           echo "code=$code" >> "$GITHUB_OUTPUT"
@@ -30,29 +26,31 @@ jobs:
             exit 1
           fi
 
-            - name: Notify Slack ONLY on failure or slow success
+      - name: Notify Slack ONLY on failure or slow success
         if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           STATUS: ${{ job.status }}
           CODE: ${{ steps.curl.outputs.code }}
           MS: ${{ steps.curl.outputs.ms }}
-          TARGET_NAME: ${{ matrix.target.name }}
-          TARGET_URL: ${{ matrix.target.url }}
+          HEALTH_URL: ${{ env.HEALTH_URL }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           LAT_WARN: ${{ env.LATENCY_WARN_MS }}
-        shell: bash
         run: |
           send=false
           level="OK"
-          if [ "${STATUS}" != "success" ]; then
+          if [ "$STATUS" != "success" ]; then
             send=true; level="FAIL"
-          elif [ "${MS}" -gt "${LAT_WARN}" ]; then
+          elif [ "$MS" -gt "$LAT_WARN" ]; then
             send=true; level="WARN"
           fi
 
           if $send; then
-            text="Uptime-check • ${level} • ${TARGET_NAME} (${TARGET_URL}) • code=${CODE} • ${MS}ms • ${RUN_URL}"
+            # Ensure jq exists (usually preinstalled on ubuntu-latest)
+            if ! command -v jq >/dev/null 2>&1; then
+              sudo apt-get update -y && sudo apt-get install -y jq
+            fi
+            text="Uptime-check • ${level} • health (${HEALTH_URL}) • code=${CODE} • ${MS}ms • ${RUN_URL}"
             payload=$(jq -n --arg text "$text" '{text: $text}')
             curl -s -X POST -H "Content-Type: application/json" --data "$payload" "$SLACK_WEBHOOK_URL"
           else
