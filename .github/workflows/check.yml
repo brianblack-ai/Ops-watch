@@ -5,6 +5,9 @@ on:
   schedule:
     - cron: "0 * * * *"   # hourly (UTC)
 
+permissions:
+  contents: write          # <-- needed to commit status files
+
 jobs:
   ping:
     runs-on: ubuntu-latest
@@ -12,6 +15,10 @@ jobs:
       HEALTH_URL: "https://lead-engine-lilac.vercel.app/api/health"
       LATENCY_WARN_MS: "1200"  # alert on success if slower than this
     steps:
+      # Needed so we can write files and commit them back
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Ping health
         id: curl
         run: |
@@ -26,6 +33,28 @@ jobs:
             exit 1
           fi
 
+      # --- NEW: write a JSON snapshot for this run ---
+      - name: Write status snapshot
+        if: always()
+        env:
+          CODE: ${{ steps.curl.outputs.code }}
+          MS: ${{ steps.curl.outputs.ms }}
+        run: |
+          sudo apt-get update -y && sudo apt-get install -y jq
+          ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          mkdir -p status
+          jq -n --arg ts "$ts" --arg code "$CODE" --arg ms "$MS" \
+            '{timestamp:$ts, code:($code|tonumber), latency_ms:($ms|tonumber)}' \
+            > "status/${ts//[:]/}.json"   # e.g. 2025-09-01T013000Z.json
+
+      - name: Commit status snapshot
+        if: always()
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(uptime-check): add status snapshot"
+          file_pattern: "status/*.json"
+
+      # Slack: alert only on fail or slow success
       - name: Notify Slack ONLY on failure or slow success
         if: always()
         env:
@@ -44,9 +73,7 @@ jobs:
           elif [ "$MS" -gt "$LAT_WARN" ]; then
             send=true; level="WARN"
           fi
-
           if $send; then
-            # Ensure jq exists (usually preinstalled on ubuntu-latest)
             if ! command -v jq >/dev/null 2>&1; then
               sudo apt-get update -y && sudo apt-get install -y jq
             fi
