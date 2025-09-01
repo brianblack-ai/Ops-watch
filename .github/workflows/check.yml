@@ -30,7 +30,7 @@ jobs:
             exit 1
           fi
 
-      - name: Notify Slack ONLY on failure or slow success
+            - name: Notify Slack ONLY on failure or slow success
         if: always()
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
@@ -45,15 +45,16 @@ jobs:
         run: |
           send=false
           level="OK"
-          if [ "$STATUS" != "success" ]; then
+          if [ "${STATUS}" != "success" ]; then
             send=true; level="FAIL"
-          elif [ "$MS" -gt "$LAT_WARN" ]; then
+          elif [ "${MS}" -gt "${LAT_WARN}" ]; then
             send=true; level="WARN"
           fi
-          if $send; then
-            payload=$(printf '{"text":"Uptime-check • %s • %s (%s) • code=%s • %sms • %s"}' \
-              "$level" "$TARGET_NAME" "$TARGET_URL" "$CODE" "$MS" "$RUN_URL")
-            curl -X POST -H 'Content-type: application/json' --data "$payload" "$SLACK_WEBHOOK_URL"
-          else
-            echo "Skipping Slack: su
 
+          if $send; then
+            text="Uptime-check • ${level} • ${TARGET_NAME} (${TARGET_URL}) • code=${CODE} • ${MS}ms • ${RUN_URL}"
+            payload=$(jq -n --arg text "$text" '{text: $text}')
+            curl -s -X POST -H "Content-Type: application/json" --data "$payload" "$SLACK_WEBHOOK_URL"
+          else
+            echo "Skipping Slack: success and ${MS}ms <= ${LAT_WARN}ms"
+          fi
