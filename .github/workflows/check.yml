@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       HEALTH_URL: "https://lead-engine-lilac.vercel.app/api/health"
-      LATENCY_WARN_MS: "1200"  # alert on success if slower than this
+      LATENCY_WARN_MS: "0"  # alert on success if slower than this
     steps:
       - name: Ping health
         id: curl
